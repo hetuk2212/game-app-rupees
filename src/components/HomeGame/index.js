@@ -5,18 +5,40 @@ import HEART from "@/public/Images/Icons/heart.png";
 import RUPEE from "@/public/Images/Icons/rupee.png";
 import Image from "next/image";
 import { Howl } from "howler";
+import axios from "axios";
+import toast from "react-hot-toast";
 
 const HomeGame = () => {
   const [squareCount, setSquareCount] = useState(5);
   const [positions, setPositions] = useState([]);
   const [clickedPositions, setClickedPositions] = useState([]);
   const [showAll, setShowAll] = useState(false);
-  const [gainedAmount, setGainedAmount] = useState(null);
+  const [gainedAmount, setGainedAmount] = useState(0.0);
   const [btnValue, setBtnValue] = useState("manual");
-  const totalKings = 23;
-  const totalHearts = 2;
-  const investedAmount = 300;
+  const [betRunning, setBetRunning] = useState(false);
+  const [selectedMine, setSelectedMine] = useState(1);
+  const [dummyBalanace, setDummyBalance] = useState(null);
+  const [investedAmount, setInvestedAmount] = useState("");
 
+  useEffect(() => {
+    const storedUserData = JSON.parse(localStorage.getItem("userData"));
+    setDummyBalance(storedUserData?.dummyBalance?.toFixed(2))
+    
+  }, []);
+
+
+const handleAmountChange = (e) => {
+  const value = e.target.value;
+
+  if (!/^\d*\.?\d*$/.test(value)) return;
+
+  if (parseFloat(value) > dummyBalanace) {
+    toast.error("Insufficient balance!");
+    return;
+  }
+
+  setInvestedAmount(value);
+};
   const clickSound = new Howl({
     src: ["/sounds/click.mp3"],
   });
@@ -29,11 +51,14 @@ const HomeGame = () => {
     const totalCells = squareCount * squareCount;
     const randomPositions = new Set();
 
-    while (randomPositions.size < totalKings) {
+    while (randomPositions.size < squareCount * squareCount - selectedMine) {
       randomPositions.add(Math.floor(Math.random() * totalCells));
     }
 
-    while (randomPositions.size < totalKings + totalHearts) {
+    while (
+      randomPositions.size <
+      squareCount * squareCount - selectedMine + selectedMine
+    ) {
       randomPositions.add(Math.floor(Math.random() * totalCells));
     }
 
@@ -41,12 +66,17 @@ const HomeGame = () => {
   }, []);
 
   const isHeartPostiton = (index) =>
-    positions.slice(totalKings).includes(index);
+    positions.slice(squareCount * squareCount - selectedMine).includes(index);
   const isKingPostion = (index) =>
-    positions.slice(0, totalKings).includes(index);
+    positions
+      .slice(0, squareCount * squareCount - selectedMine)
+      .includes(index);
 
   const handleClick = (index) => {
-    if (positions.slice(totalKings).includes(index)) {
+    if (!betRunning) return;
+    if (
+      positions.slice(squareCount * squareCount - selectedMine).includes(index)
+    ) {
       lossSound.play();
       setClickedPositions((prev) => [...prev, ...positions]);
       setGainedAmount(0);
@@ -54,8 +84,34 @@ const HomeGame = () => {
     } else if (!clickedPositions.includes(index)) {
       clickSound.play();
       setClickedPositions((prev) => [...prev, index]);
-      setGainedAmount((prev) => prev + investedAmount);
+      setGainedAmount((prev) => prev + investedAmount * 1.13);
     }
+  };
+
+  const handleRandomPick = () => {
+    if (!betRunning) return;
+    const availableTiles = Array.from(
+      { length: squareCount * squareCount },
+      (_, i) => i
+    ).filter((index) => !clickedPositions.includes(index));
+    if (availableTiles.length === 0) return;
+
+    const randomIndex =
+      availableTiles[Math.floor(Math.random() * availableTiles.length)];
+    handleClick(randomIndex);
+  };
+
+    const handleBet = () => {
+      if (parseFloat(investedAmount) > dummyBalanace || investedAmount === "") {
+        toast.error("Enter a valid amount!");
+        return;
+      }
+    
+      setBetRunning(true);
+    };
+
+  const handleChange = (event) => {
+    setSelectedMine(Number(event.target.value));
   };
 
   const grid = Array.from({ length: squareCount }, (_, rowIndex) => (
@@ -91,19 +147,6 @@ const HomeGame = () => {
       <div className="bg-primary/30 shadow-sm  rounded-lg flex items-start">
         <div className="p-2">
           <div>{grid}</div>
-          <div className="flex items-center justify-between w-full text-white font-semibold text-2xl">
-            <div>Invested: {investedAmount}</div>
-            <div>
-              Profit:{" "}
-              <span
-                className={`${
-                  gainedAmount === 0 ? "text-red-500" : "text-green-500"
-                }`}
-              >
-                {gainedAmount}
-              </span>
-            </div>
-          </div>
         </div>
         <div className="bg-primary rounded-r-lg px-3 py-2 h-full ">
           <div className="bg-secondry text-white font-semibold text-lg p-2 flex items-center gap-3 rounded-full">
@@ -135,10 +178,13 @@ const HomeGame = () => {
             </span>
             <div className="flex items-center shadow-xl bg-secondry/20 mt-1 rounded-md py-1 px-2 gap-2">
               <div className="bg-secondry flex items-center p-1 flex-[4]">
-                <input
-                  placeholder="0.00"
-                  className="bg-secondry outline-none text-white text-sm p-1 w-full"
-                />
+              <input
+  type="text"
+  value={investedAmount}
+  onChange={handleAmountChange}
+  placeholder="0.00"
+  className="bg-secondry outline-none text-white text-sm p-1 w-full"
+/>
                 <Image src={RUPEE} alt="icon" className="w-5 h-5 ml-2" />
               </div>
               <div className="flex items-center text-gray-300 font-medium gap-2 flex-[1] justify-end">
@@ -148,26 +194,74 @@ const HomeGame = () => {
               </div>
             </div>
           </div>
-          <div className="mt-2">
-            <span className="flex items-center justify-between text-gray-300 font-medium">
-              <p>Mines</p>
-            </span>
-            <div className="mt-1 shadow-xl bg-secondry/20 p-1 rounded-md">
-              <select
-                className="w-full p-2 rounded-md bg-secondry  text-gray-200 outline-none"
-                defaultValue="1"
+          {betRunning ? (
+            <div>
+              <div className="mt-4 flex items-center gap-3">
+                <div className="w-[50%]">
+                  <span className="flex items-center justify-between text-gray-300 font-medium">
+                    <p>Mines</p>
+                  </span>
+                  <div className="mt-1 bg-secondry/30 p-2 rounded-md text-gray-300 ">
+                    {selectedMine}
+                  </div>
+                </div>
+                <div className="w-[50%]">
+                  <span className="flex items-center justify-between text-gray-300 font-medium">
+                    <p>Gems</p>
+                  </span>
+                  <div className="mt-1 bg-secondry/30 p-2 rounded-md text-gray-300">
+                    {squareCount * squareCount - selectedMine}
+                  </div>
+                </div>
+              </div>
+              <div className=" mt-3">
+                <span className="flex items-center justify-between text-gray-300 font-medium mt-5">
+                  <p>Total Profit</p>
+                  <p>₹0.00</p>
+                </span>
+                <div className="mt-1 flex items-center justify-between bg-secondry/30 p-2 rounded-md text-gray-300 px-2">
+                  <p>{gainedAmount?.toFixed(2)}</p>
+                  <Image src={RUPEE} alt="icon" className="w-5 h-5 ml-2" />
+                </div>
+              </div>
+              <button
+                className="mt-3 bg-secondry/30 p-3 rounded-md text-gray-300  text-sm font-semibold text-center mb-1 w-full"
+                onClick={handleRandomPick}
               >
-                {Array.from({ length: 24 }, (_, i) => i + 1).map((num) => (
-                  <option key={num} value={num}>
-                    {num}
-                  </option>
-                ))}
-              </select>
+                Pickup Random Tile
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="mt-3">
+              <span className="flex items-center justify-between text-gray-300 font-medium">
+                <p>Mines</p>
+              </span>
+              <div className="mt-1 shadow-xl bg-secondry/20 p-1 rounded-md">
+                <select
+                  className="w-full p-2 rounded-md bg-secondry  text-gray-200 outline-none"
+                  value={selectedMine}
+                  onChange={handleChange}
+                >
+                  {Array.from({ length: 24 }, (_, i) => i + 1).map((num) => (
+                    <option key={num} value={num}>
+                      {num}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
-          <button className="bg-btnBg w-full flex items-center justify-center py-3 mt-3  rounded-lg text-lg  font-semibold">
-            Bet
+          <button
+            className={`bg-btnBg w-full flex items-center justify-center py-3 mt-3  rounded-lg text-lg  font-semibold ${
+              betRunning && clickedPositions.length === 0
+                ? "opacity-50 cursor-not-allowed shadow-md shadow-black/50"
+                : "shadow-black/60 hover:shadow-xl"
+            }`}
+            onClick={handleBet}
+            disabled={betRunning && clickedPositions.length === 0}
+          >
+            {betRunning ? "Checkout" : "Bet"}
           </button>
         </div>
       </div>

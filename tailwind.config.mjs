@@ -12,7 +12,8 @@ export default {
         secondry:"#0e212e",
         accent: "#4B5563",
         border:"#007BFF",
-        btnBg:"#00e601"
+        btnBg:"#00e601",
+        walletBg:"#1375E1"
       },
     },
   },
